@@ -16,4 +16,5 @@ export default defineConfig({
         sourcemap: false,
         minify: "esbuild",
     },
+    publicDir: 'public', // 将 public 目录复制到构建输出
 })

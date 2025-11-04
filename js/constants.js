@@ -41,7 +41,7 @@ export const INTENSITY_LEVEL_CONFIG = {
 // ============ 欢呼声配置 ============
 export const CHEER_CONFIG = {
     // 欢呼声文件路径
-    CHEER_SOUND_URL: "/music/applause-cheer-236786.mp3",
+    CHEER_SOUND_URL: import.meta.env.PROD ? "/claprun/music/applause-cheer-236786.mp3" : "/music/applause-cheer-236786.mp3",
     
     // 欢呼声播放配置
     MIN_VOLUME: 0.3, // 最小音量
@@ -65,7 +65,7 @@ export const CHEER_CONFIG = {
 
 // ============ MP3 播放器配置 ============
 export const MP3_PLAYER_CONFIG = {
-    MUSIC_URL: "/music/1762243276279213039-330481002180723.mp3",
+    MUSIC_URL: import.meta.env.PROD ? "/claprun/music/1762243276279213039-330481002180723.mp3" : "/music/1762243276279213039-330481002180723.mp3",
     VOLUME: 0.5,
     LOOP: true,
 }
