@@ -1,0 +1,15 @@
+{
+  "name": "clap-run-dance",
+  "version": "1.0.0",
+  "description": "Interactive clap-controlled dancing game with Teachable Machine audio recognition",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "vite": "^5.0.0"
+  }
+}
+
