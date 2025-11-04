@@ -1,11 +1,8 @@
 import { defineConfig } from "vite"
 
-// 根据环境动态设置 base 路径
-const isProduction = process.env.NODE_ENV === "production"
-const base = isProduction ? "/claprun/" : "/"
-
 export default defineConfig({
-    base: base,
+    // 使用相对路径，本地和部署环境都兼容
+    base: "./",
     server: {
         port: 5173,
         open: true,
