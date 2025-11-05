@@ -63,6 +63,11 @@ class DanceGame {
         this.celebrationParticles = null
         this.celebrationEmitter = null
         this.celebrationActive = false
+        this.shineOverlay = null
+        this.shineFx = null
+        this.shineAlphaTween = null
+        this.shineScanTween = null
+        this.shineScanBounds = { left: 0, right: 0, y: 0 }
     }
 
     /**
@@ -98,6 +103,7 @@ class DanceGame {
         this.createDancers(scene)
         this.createVisualization(scene)
         this.createCelebration(scene)
+        this.createShineEffect(scene)
 
         // 初始化音频上下文
         this.initAudioContext()
@@ -247,11 +253,11 @@ class DanceGame {
             speedY: { min: -80, max: 220 },
             angle: { min: -15, max: 195 },
             gravityY: 230,
-            lifespan: { min: 1400, max: 2000 },
-            quantity: 22,
+            lifespan: { min: 2600, max: 3400 },
+            quantity: 32,
             frequency: 70,
             alpha: { start: 1, end: 0 },
-            scale: { start: 1.6, end: 0.3 },
+            scale: { start: 6.4, end: 1.2 },
             rotate: { min: -260, max: 260 },
             tint: [
                 0xffffff,
@@ -264,11 +270,55 @@ class DanceGame {
                 0xccabff,
             ],
             blendMode: "SCREEN",
-            emitZone: { type: "random", source: new Phaser.Geom.Rectangle(-scene.scale.width * 0.6, 0, scene.scale.width * 1.2, 1) },
+            emitZone: { type: "random", source: new Phaser.Geom.Rectangle(-scene.scale.width * 0.6, -scene.scale.height * 0.2, scene.scale.width * 1.2, scene.scale.height * 1.4) },
         })
 
         this.celebrationEmitter.stop()
         this.celebrationActive = false
+    }
+
+    createShineEffect(scene) {
+        if (!scene) return
+
+        const textureKey = "celebration-shine"
+        const width = scene.scale.width
+        const height = scene.scale.height
+
+        if (!scene.textures.exists(textureKey)) {
+            const graphics = scene.make.graphics({ x: 0, y: 0, add: false })
+            const gradientHeight = 512
+            graphics.fillStyle(0xffffff, 0.9)
+            graphics.fillRect(0, 0, 64, gradientHeight)
+            graphics.generateTexture(textureKey, 64, gradientHeight)
+            graphics.destroy()
+        }
+
+        const beamWidth = Math.max(width * 0.32, 220)
+        const beamHeight = height * 1.35
+        this.shineScanBounds = {
+            left: width * 0.25,
+            right: width * 0.75,
+            y: height * 0.46,
+        }
+
+        this.shineOverlay = scene.add.image(this.shineScanBounds.left, this.shineScanBounds.y, textureKey)
+        this.shineOverlay.setDepth(80)
+        this.shineOverlay.setBlendMode(Phaser.BlendModes.ADD)
+        this.shineOverlay.setVisible(false)
+        this.shineOverlay.setAlpha(0)
+        this.shineOverlay.setScrollFactor(0)
+        this.shineOverlay.setDisplaySize(beamWidth, beamHeight)
+        this.shineOverlay.setAngle(-12)
+
+        if (this.shineOverlay.preFX) {
+            this.shineFx = this.shineOverlay.preFX.addShine(0.55, 0.35, 3.5, false)
+            this.shineFx.speed = 1.1
+            this.shineFx.lineWidth = 0.28
+            this.shineFx.gradient = 4.5
+            this.shineFx.setActive(false)
+        } else {
+            this.shineFx = null
+        }
     }
 
     applyLayout(width, height) {
@@ -351,9 +401,30 @@ class DanceGame {
         }
 
         if (this.celebrationEmitter) {
-            const zone = new Phaser.Geom.Rectangle(-width * 0.6, 0, width * 1.2, 1)
+            const zone = new Phaser.Geom.Rectangle(-width * 0.6, -height * 0.2, width * 1.2, height * 1.4)
             this.celebrationEmitter.setPosition(centerX, height * 0.08)
             this.celebrationEmitter.setEmitZone({ type: "random", source: zone })
+        }
+
+        if (this.shineOverlay) {
+            const beamWidth = Math.max(width * 0.32, 220)
+            const beamHeight = height * 1.35
+            this.shineScanBounds = {
+                left: width * 0.25,
+                right: width * 0.75,
+                y: height * 0.46,
+            }
+
+            this.shineOverlay.setDisplaySize(beamWidth, beamHeight)
+            this.shineOverlay.setPosition(this.shineScanBounds.left, this.shineScanBounds.y)
+            this.shineOverlay.setAngle(-12)
+
+            if (this.shineScanTween) {
+                this.stopShineScanTween()
+                if (this.celebrationActive) {
+                    this.startShineScanTween()
+                }
+            }
         }
 
         this.setActiveDancerCount(this.activeDancerCount)
@@ -747,15 +818,105 @@ class DanceGame {
     }
 
     setCelebrationActive(active) {
-        if (!this.celebrationEmitter) return
-
         if (active && !this.celebrationActive) {
-            this.celebrationEmitter.start()
+            if (this.celebrationEmitter) {
+                this.celebrationEmitter.start()
+            }
+            this.enableShineEffect()
         } else if (!active && this.celebrationActive) {
-            this.celebrationEmitter.stop()
+            if (this.celebrationEmitter) {
+                this.celebrationEmitter.stop()
+            }
+            this.disableShineEffect()
         }
 
         this.celebrationActive = active
+    }
+
+    startShineScanTween() {
+        if (!this.scene || !this.shineOverlay) return
+
+        this.stopShineScanTween()
+
+        this.shineOverlay.setPosition(this.shineScanBounds.left, this.shineScanBounds.y)
+        this.shineOverlay.setAngle(-12)
+
+        this.shineScanTween = this.scene.tweens.timeline({
+            targets: this.shineOverlay,
+            loop: -1,
+            tweens: [
+                {
+                    x: this.shineScanBounds.right,
+                    angle: 18,
+                    duration: 2000,
+                    ease: "Sine.easeInOut",
+                },
+                {
+                    x: this.shineScanBounds.left,
+                    angle: -18,
+                    duration: 2000,
+                    ease: "Sine.easeInOut",
+                },
+            ],
+        })
+    }
+
+    stopShineScanTween() {
+        if (this.shineScanTween) {
+            this.shineScanTween.stop()
+            this.shineScanTween.destroy()
+            this.shineScanTween = null
+        }
+    }
+
+    enableShineEffect() {
+        if (!this.shineOverlay || !this.scene) return
+
+        if (this.shineAlphaTween) {
+            this.shineAlphaTween.stop()
+        }
+
+        this.shineOverlay.setVisible(true)
+        this.startShineScanTween()
+
+        if (this.shineFx) {
+            this.shineFx.setActive(true)
+        }
+
+        this.shineAlphaTween = this.scene.tweens.add({
+            targets: this.shineOverlay,
+            alpha: 0.55,
+            duration: 420,
+            ease: "Sine.easeOut",
+        })
+    }
+
+    disableShineEffect() {
+        if (!this.shineOverlay || !this.scene) return
+
+        if (this.shineAlphaTween) {
+            this.shineAlphaTween.stop()
+        }
+
+        if (this.shineFx) {
+            this.shineFx.setActive(false)
+        }
+
+        this.stopShineScanTween()
+
+        this.shineAlphaTween = this.scene.tweens.add({
+            targets: this.shineOverlay,
+            alpha: 0,
+            duration: 480,
+            ease: "Sine.easeIn",
+            onComplete: () => {
+                if (this.shineOverlay) {
+                    this.shineOverlay.setVisible(false)
+                    this.shineOverlay.setPosition(this.shineScanBounds.left, this.shineScanBounds.y)
+                    this.shineOverlay.setAngle(-12)
+                }
+            },
+        })
     }
 
     /**
@@ -782,6 +943,19 @@ class DanceGame {
             this.celebrationParticles = null
             this.celebrationEmitter = null
             this.celebrationActive = false
+        }
+
+        if (this.shineAlphaTween) {
+            this.shineAlphaTween.stop()
+            this.shineAlphaTween = null
+        }
+
+        this.stopShineScanTween()
+
+        if (this.shineOverlay) {
+            this.shineOverlay.destroy()
+            this.shineOverlay = null
+            this.shineFx = null
         }
 
         if (this.game) {
