@@ -20,9 +20,9 @@ export const CLAP_INTENSITY_CONFIG = {
     MAX_ACCELERATION: 2.0, // 最大加速度
 
     // 非线性阻力系统 - 实现真实汽车减速
-    BASE_FRICTION: 1, // 基础摩擦系数
+    BASE_FRICTION: 0.5, // 基础摩擦系数
     AIR_RESISTANCE_FACTOR: 0.15, // 空气阻力因子（二次方阻力）
-    ENGINE_BRAKE: 0.05, // 发动机制动（松油门时的额外阻力）
+    ENGINE_BRAKE: 0.15, // 发动机制动（松油门时的额外阻力）
 
     // 速度相关的阻力参数
     LOW_SPEED_FRICTION: 0.02, // 低速时的基础阻力
@@ -38,6 +38,10 @@ export const CLAP_INTENSITY_CONFIG = {
 
     // 历史记录窗口
     CLAP_HISTORY_WINDOW: 3000, // 时间窗口 (ms)
+
+    // 进度满值后的速度保持
+    SPEED_HOLD_DURATION: 5000, // 维持最大速度的时间 (ms)
+    SPEED_HOLD_ACTIVATION_THRESHOLD: 0.25, // 触发保速时距离最大速度的差值
 
     // 置信度阈值
     CLAP_THRESHOLD: 0.8, // 80% 置信度
@@ -81,7 +85,7 @@ export const CHEER_CONFIG = {
 // ============ MP3 播放器配置 ============
 export const MP3_PLAYER_CONFIG = {
     MUSIC_URL: "./music/legacy-of-brahms-hungarian-dance-no5-fun-background-dance-music-191255.mp3",
-    VOLUME: 0.5,
+    VOLUME: 1,
     LOOP: true,
 }
 
@@ -90,20 +94,17 @@ export const GAME_CONFIG = {
     // 舞蹈强度范围
     MIN_DANCE_INTENSITY: 0.2, // 最小舞蹈强度
     MAX_DANCE_INTENSITY: 1.0, // 最大舞蹈强度
-
-    // 游戏循环间隔
-    GAME_LOOP_INTERVAL: 1200, // 游戏循环间隔 (ms)
 }
 
 // ============ 音频识别配置 ============
 export const AUDIO_RECOGNIZER_CONFIG = {
     // 模型 URL
-    MODEL_URL: "https://teachablemachine.withgoogle.com/models/Yd0Yd0Yd0/model.json",
-    METADATA_URL: "https://teachablemachine.withgoogle.com/models/Yd0Yd0Yd0/metadata.json",
+    MODEL_URL: "https://teachablemachine.withgoogle.com/models/Z4siyrF6g/model.json",
+    METADATA_URL: "https://teachablemachine.withgoogle.com/models/Z4siyrF6g/metadata.json",
 
     // 识别参数
     INCLUDE_SPECTROGRAM: false,
-    PROBABILITY_THRESHOLD: 0.5,
+    PROBABILITY_THRESHOLD: 0.8,
     INVOKE_CALLBACK_ON_NOISE_AND_UNKNOWN: true,
     OVERLAP_FACTOR: 0.8,
 }

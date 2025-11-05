@@ -29,7 +29,7 @@ async function loadModel() {
 
         // 创建音频识别器
         audioRecognizer = new AudioRecognizer({
-            modelURL: "https://teachablemachine.withgoogle.com/models/7xwSK62zg/",
+            modelURL: "https://teachablemachine.withgoogle.com/models/Z4siyrF6g/",
             clapThreshold: 0.8,
             clapLabel: "clap",
             clapCooldown: 200,
@@ -114,19 +114,28 @@ async function initAndStartGame() {
             minSpeed: SPEED_CONFIG.MIN_SPEED,
             onSpeedChange: (data) => {
                 // 计算音乐速度（基于进度，最大2倍）
-                let musicSpeed = 1.0;
+                let musicSpeed = 1.0
                 if (data.progressRatio !== undefined) {
-                    const threshold = SPEED_CONFIG.MUSIC_SPEED_PROGRESS_THRESHOLD; // 75%
+                    const threshold = SPEED_CONFIG.MUSIC_SPEED_PROGRESS_THRESHOLD // 75%
                     if (data.progressRatio <= threshold) {
                         // 在75%进度内，音乐速度从1.0增长到2.0
-                        musicSpeed = 1.0 + (SPEED_CONFIG.MUSIC_MAX_SPEED - 1.0) * (data.progressRatio / threshold);
+                        musicSpeed = 1.0 + (SPEED_CONFIG.MUSIC_MAX_SPEED - 1.0) * (data.progressRatio / threshold)
                     } else {
                         // 超过75%后，音乐速度保持最大值
-                        musicSpeed = SPEED_CONFIG.MUSIC_MAX_SPEED;
+                        musicSpeed = SPEED_CONFIG.MUSIC_MAX_SPEED
                     }
                 } else {
                     // 如果没有进度数据，使用保守的速度计算
-                    musicSpeed = Math.min(SPEED_CONFIG.MUSIC_MAX_SPEED, Math.max(1.0, data.speed * 0.3));
+                    musicSpeed = Math.min(SPEED_CONFIG.MUSIC_MAX_SPEED, Math.max(1.0, data.speed * 0.3))
+                }
+
+                if (audioRecognizer) {
+                    const shouldLowerThreshold = typeof data.progressRatio === "number" && data.progressRatio > 0.5
+                    if (shouldLowerThreshold) {
+                        audioRecognizer.setClapThreshold(0.7)
+                    } else {
+                        audioRecognizer.resetClapThreshold()
+                    }
                 }
 
                 // 更新游戏速度（舞蹈速度，最大10倍）
@@ -149,11 +158,15 @@ async function initAndStartGame() {
                     intensityVisualizer.update({
                         ...data,
                         musicSpeed: musicSpeed,
-                        danceSpeed: data.speed
+                        danceSpeed: data.speed,
                     })
                 }
 
-                console.log(`[Main] 速度更新 - 舞蹈: ${data.speed.toFixed(2)}x, 音乐: ${musicSpeed.toFixed(2)}x, 进度: ${(data.progressRatio || 0).toFixed(2)}`);
+                console.log(
+                    `[Main] 速度更新 - 舞蹈: ${data.speed.toFixed(2)}x, 音乐: ${musicSpeed.toFixed(2)}x, 进度: ${(
+                        data.progressRatio || 0
+                    ).toFixed(2)}`
+                )
             },
         })
 
@@ -326,7 +339,7 @@ function simulateClap() {
     const simulatedClapData = {
         confidence: 0.95, // 高置信度
         timestamp: Date.now(),
-        isSimulated: true
+        isSimulated: true,
     }
 
     // 调用相同的处理函数
@@ -349,7 +362,13 @@ function simulateClap() {
  */
 function handleClap(clapData) {
     clapCount++
-    console.log("[Main] 拍巴掌计数:", clapCount, "置信度:", clapData.confidence.toFixed(2), clapData.isSimulated ? "(模拟)" : "(真实)")
+    console.log(
+        "[Main] 拍巴掌计数:",
+        clapCount,
+        "置信度:",
+        clapData.confidence.toFixed(2),
+        clapData.isSimulated ? "(模拟)" : "(真实)"
+    )
 
     // 记录鼓掌烈度
     if (clapIntensity) {

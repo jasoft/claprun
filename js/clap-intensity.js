@@ -39,6 +39,11 @@ class ClapIntensity {
         this.clapForceDuration = options.clapForceDuration || CLAP_INTENSITY_CONFIG.CLAP_FORCE_DURATION
         this.frequencyWindow = options.frequencyWindow || CLAP_INTENSITY_CONFIG.FREQUENCY_WINDOW
         this.clapForceMultiplier = options.clapForceMultiplier || CLAP_INTENSITY_CONFIG.CLAP_FORCE_MULTIPLIER
+        this.speedHoldDuration = options.speedHoldDuration || CLAP_INTENSITY_CONFIG.SPEED_HOLD_DURATION
+        this.speedHoldActivationThreshold =
+            options.speedHoldActivationThreshold ||
+            CLAP_INTENSITY_CONFIG.SPEED_HOLD_ACTIVATION_THRESHOLD ||
+            0.25
 
         // 计时器
         this.physicsTimer = null
@@ -46,6 +51,11 @@ class ClapIntensity {
 
         // 回调函数
         this.onSpeedChange = options.onSpeedChange || (() => {})
+
+        // 最大速度保持
+        this.speedHoldActive = false
+        this.speedHoldUntil = 0
+        this.lastSpeed = this.currentSpeed
     }
 
     /**
@@ -103,6 +113,10 @@ class ClapIntensity {
         const deltaTime = (now - this.lastUpdateTime) / 1000.0 // 转换为秒
         this.lastUpdateTime = now
 
+        if (this.speedHoldActive && now >= this.speedHoldUntil) {
+            this.speedHoldActive = false
+        }
+
         // 1. 计算当前油门深度（基于1秒内的鼓掌频率）
         const recentClaps = this.clapHistory.filter(time => now - time < this.frequencyWindow)
         const clapFrequency = recentClaps.length / (this.frequencyWindow / 1000.0) // 次/秒
@@ -128,7 +142,14 @@ class ClapIntensity {
 
         // 发动机制动（松油门时额外阻力）
         let engineBrakeForce = this.throttle < 0.1 ? this.engineBrake : 0
+        if (this.speedHoldActive) {
+            engineBrakeForce = 0
+        }
         totalResistance += engineBrakeForce
+
+        if (this.speedHoldActive) {
+            totalResistance = 0
+        }
 
         this.currentAcceleration = totalForce - totalResistance
 
@@ -137,6 +158,19 @@ class ClapIntensity {
 
         // 5. 严格限制速度范围
         this.currentSpeed = Math.max(this.minSpeed, Math.min(this.maxSpeed, this.currentSpeed))
+        if (this.speedHoldActive) {
+            this.currentSpeed = this.maxSpeed
+        }
+
+        const activationThreshold = Math.max(0, this.maxSpeed - this.speedHoldActivationThreshold)
+        const crossedActivation =
+            !this.speedHoldActive &&
+            this.lastSpeed < activationThreshold &&
+            this.currentSpeed >= activationThreshold
+
+        if (crossedActivation) {
+            this.activateSpeedHold(now)
+        }
 
         // 6. 如果速度接近基础速度且没有推力，停止物理引擎
         if (Math.abs(this.currentSpeed - this.baseSpeed) < 0.01 &&
@@ -155,7 +189,10 @@ class ClapIntensity {
             clapFrequency: clapFrequency,
             progressRatio: progressRatio,
             throttle: this.throttle,
+            isSpeedHoldActive: this.speedHoldActive,
         })
+
+        this.lastSpeed = this.currentSpeed
     }
 
     /**
@@ -249,8 +286,17 @@ class ClapIntensity {
         this.clapHistory = []
         this.clapForces = []
         this.lastUpdateTime = Date.now()
+        this.speedHoldActive = false
+        this.speedHoldUntil = 0
+        this.lastSpeed = this.currentSpeed
 
         console.log("[ClapIntensity] 状态已重置")
+    }
+
+    activateSpeedHold(now) {
+        this.speedHoldActive = true
+        this.speedHoldUntil = now + this.speedHoldDuration
+        this.currentSpeed = this.maxSpeed
     }
 
     /**

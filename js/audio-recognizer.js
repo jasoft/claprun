@@ -6,7 +6,7 @@ class AudioRecognizer {
     constructor(options = {}) {
         // Teachable Machine 模型 URL
         // 这是一个示例 URL，您需要替换为自己训练的模型
-        this.modelURL = options.modelURL || "https://teachablemachine.withgoogle.com/models/7xwSK62zg/"
+        this.modelURL = options.modelURL
 
         this.recognizer = null
         this.isListening = false
@@ -19,6 +19,7 @@ class AudioRecognizer {
 
         // 拍巴掌检测参数
         this.clapThreshold = options.clapThreshold || 0.8 // 置信度阈值
+        this.defaultClapThreshold = this.clapThreshold
         this.clapLabel = options.clapLabel || "clap" // 拍巴掌的标签
         this.lastClapTime = 0
         this.clapCooldown = options.clapCooldown || 10 // 毫秒，防止重复检测
@@ -186,6 +187,31 @@ class AudioRecognizer {
                 return
             }
         }
+    }
+
+    /**
+     * 更新拍巴掌置信度阈值
+     */
+    setClapThreshold(threshold) {
+        if (typeof threshold !== "number" || Number.isNaN(threshold)) {
+            console.warn("[AudioRecognizer] 无效的阈值:", threshold)
+            return
+        }
+
+        const normalizedThreshold = Math.max(0, Math.min(1, threshold))
+        if (Math.abs(this.clapThreshold - normalizedThreshold) < 0.0001) {
+            return
+        }
+
+        this.clapThreshold = normalizedThreshold
+        console.log(`[AudioRecognizer] 更新拍巴掌阈值: ${this.clapThreshold.toFixed(2)}`)
+    }
+
+    /**
+     * 恢复默认阈值
+     */
+    resetClapThreshold() {
+        this.setClapThreshold(this.defaultClapThreshold)
     }
 
     /**
