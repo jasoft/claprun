@@ -1,11 +1,11 @@
 /**
- * 鼓掌强度计算模块 - 基于加速度公式实时计算速度
+ * 鼓掌强度计算模块 - 真正的汽车物理模型
  *
  * 物理模型:
- * - 每次鼓掌是一个加速度脉冲
- * - 单位时间内鼓掌次数越多，加速度越大
- * - 速度 = 初始速度 + 加速度 * 时间
- * - 速度衰减: 没有新的鼓掌时，速度逐渐恢复到基础速度
+ * - 鼓掌频率 = 油门深度 (0-1)
+ * - 加速度 = 油门深度 * 最大加速度 - 摩擦阻力 - 发动机制动
+ * - 速度通过积分加速度计算，严格限制在最大速度内
+ * - 松开油门立即开始减速，无延迟
  */
 
 import { CLAP_INTENSITY_CONFIG, SPEED_CONFIG } from "./constants.js"
@@ -17,140 +17,156 @@ class ClapIntensity {
         this.maxSpeed = options.maxSpeed || SPEED_CONFIG.MAX_SPEED
         this.minSpeed = options.minSpeed || SPEED_CONFIG.MIN_SPEED
 
-        // 当前状态
+        // 物理状态
         this.currentSpeed = this.baseSpeed
-        this.currentAcceleration = 0 // 当前加速度
+        this.currentAcceleration = 0 // 当前加速度 (m/s²)
+        this.throttle = 0 // 油门深度 (0-1)
 
-        // 鼓掌历史记录（用于计算频率）
+        // 鼓掌历史记录（用于计算频率=油门深度）
         this.clapHistory = [] // 存储最近的鼓掌时间戳
-        this.clapHistoryWindow = options.clapHistoryWindow || CLAP_INTENSITY_CONFIG.CLAP_HISTORY_WINDOW
+        this.clapForces = [] // 存储鼓掌产生的推力 {timestamp, force, endTime}
 
-        // 加速度参数
-        this.accelerationPerClap = options.accelerationPerClap || CLAP_INTENSITY_CONFIG.ACCELERATION_PER_CLAP
-        this.accelerationFromFrequency =
-            options.accelerationFromFrequency || CLAP_INTENSITY_CONFIG.ACCELERATION_FROM_FREQUENCY
+        // 物理参数
+        this.maxAcceleration = options.maxAcceleration || CLAP_INTENSITY_CONFIG.MAX_ACCELERATION
 
-        // 衰减参数
-        this.decayRate = options.decayRate || CLAP_INTENSITY_CONFIG.DECAY_RATE
-        this.decayInterval = options.decayInterval || CLAP_INTENSITY_CONFIG.DECAY_INTERVAL
-        this.decayDelay = options.decayDelay || CLAP_INTENSITY_CONFIG.DECAY_DELAY
+        // 非线性阻力系统参数
+        this.baseFriction = options.baseFriction || CLAP_INTENSITY_CONFIG.BASE_FRICTION
+        this.airResistanceFactor = options.airResistanceFactor || CLAP_INTENSITY_CONFIG.AIR_RESISTANCE_FACTOR
+        this.engineBrake = options.engineBrake || CLAP_INTENSITY_CONFIG.ENGINE_BRAKE
+        this.lowSpeedFriction = options.lowSpeedFriction || CLAP_INTENSITY_CONFIG.LOW_SPEED_FRICTION
+        this.highSpeedMultiplier = options.highSpeedMultiplier || CLAP_INTENSITY_CONFIG.HIGH_SPEED_MULTIPLIER
+        this.physicsUpdateInterval = options.physicsUpdateInterval || CLAP_INTENSITY_CONFIG.PHYSICS_UPDATE_INTERVAL
+        this.clapForceDuration = options.clapForceDuration || CLAP_INTENSITY_CONFIG.CLAP_FORCE_DURATION
+        this.frequencyWindow = options.frequencyWindow || CLAP_INTENSITY_CONFIG.FREQUENCY_WINDOW
+        this.clapForceMultiplier = options.clapForceMultiplier || CLAP_INTENSITY_CONFIG.CLAP_FORCE_MULTIPLIER
 
         // 计时器
-        this.decayTimer = null
-        this.lastClapTime = 0
+        this.physicsTimer = null
+        this.lastUpdateTime = Date.now()
 
         // 回调函数
         this.onSpeedChange = options.onSpeedChange || (() => {})
     }
 
     /**
-     * 记录一次鼓掌事件
+     * 记录一次鼓掌事件 - 添加推力
      * @param {Object} clapData - 鼓掌数据 { confidence, label, timestamp }
      */
     recordClap(clapData) {
         const now = Date.now()
-        this.lastClapTime = now
 
         // 添加到历史记录
         this.clapHistory.push(now)
 
-        // 清理过期的历史记录
-        this.clapHistory = this.clapHistory.filter((time) => now - time < this.clapHistoryWindow)
+        // 清理过期的历史记录（保留1秒内用于计算频率）
+        this.clapHistory = this.clapHistory.filter((time) => now - time < this.frequencyWindow)
 
-        // 计算当前的鼓掌频率 (次/秒)
-        const clapFrequency = (this.clapHistory.length / this.clapHistoryWindow) * 1000
+        // 添加鼓掌推力（相当于踩油门）
+        const force = clapData.confidence * this.clapForceMultiplier
+        this.clapForces.push({
+            timestamp: now,
+            force: force,
+            endTime: now + this.clapForceDuration
+        })
 
-        // 计算加速度
-        // 1. 基础加速度：每次鼓掌增加固定值
-        let acceleration = this.accelerationPerClap
-
-        // 2. 频率加速度：鼓掌越频繁，加速度越大
-        // 频率范围: 0-10 次/秒，映射到 0-0.5 的加速度
-        const frequencyAcceleration = Math.min(0.5, (clapFrequency / 10) * this.accelerationFromFrequency)
-        acceleration += frequencyAcceleration
-
-        // 3. 置信度加速度：置信度越高，加速度越大
-        const confidenceAcceleration = clapData.confidence * 0.1
-        acceleration += confidenceAcceleration
-
-        // 更新当前加速度
-        this.currentAcceleration = acceleration
-
-        // 立即更新速度
-        this.updateSpeed()
+        // 启动物理模拟（如果还没启动）
+        this.startPhysicsSimulation()
 
         console.log("[ClapIntensity] 鼓掌事件:", {
-            frequency: clapFrequency.toFixed(2) + " 次/秒",
-            acceleration: acceleration.toFixed(3),
+            force: force.toFixed(3),
             currentSpeed: this.currentSpeed.toFixed(2) + "x",
-            clapCount: this.clapHistory.length,
-        })
-
-        // 启动衰减计时器
-        this.startDecayTimer()
-    }
-
-    /**
-     * 更新速度
-     */
-    updateSpeed() {
-        // 速度 = 当前速度 + 加速度
-        this.currentSpeed = Math.min(
-            this.maxSpeed,
-            Math.max(this.minSpeed, this.currentSpeed + this.currentAcceleration)
-        )
-
-        // 触发回调
-        this.onSpeedChange({
-            speed: this.currentSpeed,
-            acceleration: this.currentAcceleration,
-            clapFrequency: (this.clapHistory.length / this.clapHistoryWindow) * 1000,
+            activeForces: this.clapForces.length,
         })
     }
 
     /**
-     * 启动衰减计时器
+     * 启动物理模拟 - 真正的汽车物理引擎
      */
-    startDecayTimer() {
-        // 如果已有计时器，不重新启动
-        if (this.decayTimer) {
+    startPhysicsSimulation() {
+        // 如果物理引擎已在运行，不重复启动
+        if (this.physicsTimer) {
             return
         }
 
-        this.decayTimer = setInterval(() => {
-            const now = Date.now()
-            const timeSinceLastClap = now - this.lastClapTime
+        this.physicsTimer = setInterval(() => {
+            this.updatePhysics()
+        }, this.physicsUpdateInterval)
 
-            // 如果距离上次鼓掌超过 500ms，开始衰减
-            if (timeSinceLastClap > 500) {
-                // 衰减加速度
-                this.currentAcceleration = Math.max(0, this.currentAcceleration - this.decayRate)
+        console.log("[ClapIntensity] 物理引擎已启动")
+    }
 
-                // 衰减速度（向基础速度靠近）
-                const speedDiff = this.currentSpeed - this.baseSpeed
-                if (Math.abs(speedDiff) > 0.01) {
-                    this.currentSpeed -= speedDiff * 0.05 // 5% 的衰减
-                } else {
-                    this.currentSpeed = this.baseSpeed
-                }
+    /**
+     * 物理更新 - 汽车动力学模拟
+     */
+    updatePhysics() {
+        const now = Date.now()
+        const deltaTime = (now - this.lastUpdateTime) / 1000.0 // 转换为秒
+        this.lastUpdateTime = now
 
-                // 清理过期的历史记录
-                this.clapHistory = this.clapHistory.filter((time) => now - time < this.clapHistoryWindow)
+        // 1. 计算当前油门深度（基于1秒内的鼓掌频率）
+        const recentClaps = this.clapHistory.filter(time => now - time < this.frequencyWindow)
+        const clapFrequency = recentClaps.length / (this.frequencyWindow / 1000.0) // 次/秒
+        this.throttle = Math.min(1.0, clapFrequency / 3.0) // 假设3次/秒为满油门
 
-                // 触发回调
-                this.onSpeedChange({
-                    speed: this.currentSpeed,
-                    acceleration: this.currentAcceleration,
-                    clapFrequency: (this.clapHistory.length / this.clapHistoryWindow) * 1000,
-                })
-
-                // 如果速度已恢复到基础速度，停止计时器
-                if (this.currentSpeed === this.baseSpeed && this.currentAcceleration === 0) {
-                    clearInterval(this.decayTimer)
-                    this.decayTimer = null
-                }
+        // 2. 计算当前推力（来自仍在持续作用的鼓掌）
+        let currentThrottleForce = 0
+        this.clapForces = this.clapForces.filter(force => {
+            if (now < force.endTime) {
+                currentThrottleForce += force.force
+                return true
             }
-        }, this.decayInterval)
+            return false
+        })
+
+        // 3. 计算加速度 (F = ma, 这里 m=1)
+        // 加速度 = 油门推力 + 持续推力 - 非线性阻力
+        let engineForce = this.throttle * this.maxAcceleration
+        let totalForce = engineForce + currentThrottleForce
+
+        // 非线性阻力计算 - 实现指数衰减减速
+        let totalResistance = this.calculateNonLinearResistance()
+
+        // 发动机制动（松油门时额外阻力）
+        let engineBrakeForce = this.throttle < 0.1 ? this.engineBrake : 0
+        totalResistance += engineBrakeForce
+
+        this.currentAcceleration = totalForce - totalResistance
+
+        // 4. 更新速度 (v = v0 + a * dt)
+        this.currentSpeed += this.currentAcceleration * deltaTime
+
+        // 5. 严格限制速度范围
+        this.currentSpeed = Math.max(this.minSpeed, Math.min(this.maxSpeed, this.currentSpeed))
+
+        // 6. 如果速度接近基础速度且没有推力，停止物理引擎
+        if (Math.abs(this.currentSpeed - this.baseSpeed) < 0.01 &&
+            this.throttle < 0.01 &&
+            this.clapForces.length === 0) {
+            this.currentSpeed = this.baseSpeed
+            this.stopPhysicsSimulation()
+            return
+        }
+
+        // 7. 触发回调
+        const progressRatio = Math.min(1.0, (this.currentSpeed - this.baseSpeed) / (this.maxSpeed - this.baseSpeed))
+        this.onSpeedChange({
+            speed: this.currentSpeed,
+            acceleration: this.currentAcceleration,
+            clapFrequency: clapFrequency,
+            progressRatio: progressRatio,
+            throttle: this.throttle,
+        })
+    }
+
+    /**
+     * 停止物理模拟
+     */
+    stopPhysicsSimulation() {
+        if (this.physicsTimer) {
+            clearInterval(this.physicsTimer)
+            this.physicsTimer = null
+            console.log("[ClapIntensity] 物理引擎已停止")
+        }
     }
 
     /**
@@ -168,35 +184,81 @@ class ClapIntensity {
     }
 
     /**
+     * 计算非线性阻力 - 实现真实汽车指数衰减减速
+     * 高速时阻力大（快速减速），低速时阻力小（缓慢减速）
+     */
+    calculateNonLinearResistance() {
+        const speedRatio = this.currentSpeed / this.maxSpeed // 速度比例 (0-1)
+
+        // 1. 基础阻力（线性部分）
+        let baseResistance = this.baseFriction
+
+        // 2. 空气阻力（二次方增长，高速时显著增大）
+        // 真实汽车：空气阻力 = 0.5 * ρ * Cd * A * v²
+        // 简化版本：随速度平方增长
+        let airResistance = this.airResistanceFactor * Math.pow(speedRatio, 2)
+
+        // 3. 速度相关的非线性阻力
+        let speedDependentResistance
+        if (speedRatio > 0.7) {
+            // 高速区域（>70%最大速度）：阻力急剧增大
+            speedDependentResistance = this.lowSpeedFriction + (speedRatio - 0.7) * this.highSpeedMultiplier
+        } else {
+            // 中低速区域：基础阻力
+            speedDependentResistance = this.lowSpeedFriction
+        }
+
+        // 4. 总阻力 = 基础阻力 + 空气阻力 + 速度相关阻力
+        let totalResistance = baseResistance + airResistance + speedDependentResistance
+
+        // 5. 确保阻力不会导致负向加速度过大（防止过于剧烈的减速）
+        totalResistance = Math.min(totalResistance, this.currentSpeed * 0.5) // 最多每秒减速50%
+
+        return totalResistance
+    }
+
+    /**
+     * 获取当前油门深度
+     */
+    getThrottle() {
+        return this.throttle
+    }
+
+    /**
      * 获取鼓掌频率 (次/秒)
      */
     getClapFrequency() {
-        return (this.clapHistory.length / this.clapHistoryWindow) * 1000
+        const now = Date.now()
+        const recentClaps = this.clapHistory.filter(time => now - time < this.frequencyWindow)
+        return recentClaps.length / (this.frequencyWindow / 1000.0)
     }
 
     /**
      * 重置状态
      */
     reset() {
+        // 停止物理引擎
+        this.stopPhysicsSimulation()
+
+        // 重置状态
         this.currentSpeed = this.baseSpeed
         this.currentAcceleration = 0
-        this.clapHistory = []
-        this.lastClapTime = 0
+        this.throttle = 0
 
-        if (this.decayTimer) {
-            clearInterval(this.decayTimer)
-            this.decayTimer = null
-        }
+        // 清空数据
+        this.clapHistory = []
+        this.clapForces = []
+        this.lastUpdateTime = Date.now()
+
+        console.log("[ClapIntensity] 状态已重置")
     }
 
     /**
      * 销毁
      */
     destroy() {
-        if (this.decayTimer) {
-            clearInterval(this.decayTimer)
-            this.decayTimer = null
-        }
+        this.stopPhysicsSimulation()
+        console.log("[ClapIntensity] 已销毁")
     }
 }
 

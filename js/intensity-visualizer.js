@@ -63,8 +63,12 @@ class IntensityVisualizer {
                         <h3>🎵 鼓掌烈度</h3>
                         <div class="intensity-stats">
                             <div class="stat">
-                                <span class="label">速度:</span>
-                                <span class="value" id="speedDisplay">1.0x</span>
+                                <span class="label">舞蹈速度:</span>
+                                <span class="value" id="danceSpeedDisplay">1.0x</span>
+                            </div>
+                            <div class="stat">
+                                <span class="label">音乐速度:</span>
+                                <span class="value" id="musicSpeedDisplay">1.0x</span>
                             </div>
                             <div class="stat">
                                 <span class="label">频率:</span>
@@ -107,7 +111,8 @@ class IntensityVisualizer {
             // 获取元素引用
             this.progressBar = document.getElementById("progressBar")
             this.progressGlow = document.getElementById("progressGlow")
-            this.speedDisplay = document.getElementById("speedDisplay")
+            this.danceSpeedDisplay = document.getElementById("danceSpeedDisplay")
+            this.musicSpeedDisplay = document.getElementById("musicSpeedDisplay")
             this.frequencyDisplay = document.getElementById("frequencyDisplay")
             this.motivationText = document.getElementById("motivationText")
             this.intensityLevel = document.getElementById("intensityLevel")
@@ -306,17 +311,24 @@ class IntensityVisualizer {
 
     /**
      * 更新烈度显示
-     * @param {Object} data - { speed, acceleration, clapFrequency }
+     * @param {Object} data - { speed, acceleration, clapFrequency, musicSpeed, danceSpeed, progressRatio }
      */
     update(data) {
-        const { speed, acceleration, clapFrequency } = data
+        const { speed, acceleration, clapFrequency, musicSpeed, danceSpeed, progressRatio } = data
+
+        // 使用传入的舞蹈速度，如果没有则使用通用速度
+        const currentDanceSpeed = danceSpeed || speed
 
         // 计算进度百分比 (相对于基础速度的增量)
-        // baseSpeed (1.0x) → 0%
-        // maxSpeed (3.0x) → 100%
-        const speedAboveBase = speed - this.baseSpeed
-        const maxSpeedAboveBase = this.maxSpeed - this.baseSpeed
-        const progress = Math.max(0, Math.min(100, (speedAboveBase / maxSpeedAboveBase) * 100))
+        // 使用进度比例或基于舞蹈速度计算
+        let progress = 0
+        if (progressRatio !== undefined) {
+            progress = Math.max(0, Math.min(100, progressRatio * 100))
+        } else {
+            const speedAboveBase = currentDanceSpeed - this.baseSpeed
+            const maxSpeedAboveBase = this.maxSpeed - this.baseSpeed
+            progress = Math.max(0, Math.min(100, (speedAboveBase / maxSpeedAboveBase) * 100))
+        }
 
         // 更新进度条
         if (this.progressBar) {
@@ -327,9 +339,15 @@ class IntensityVisualizer {
             this.progressGlow.style.width = progress + "%"
         }
 
-        // 更新速度显示
-        if (this.speedDisplay) {
-            this.speedDisplay.textContent = speed.toFixed(2) + "x"
+        // 更新舞蹈速度显示
+        if (this.danceSpeedDisplay) {
+            this.danceSpeedDisplay.textContent = currentDanceSpeed.toFixed(2) + "x"
+        }
+
+        // 更新音乐速度显示
+        if (this.musicSpeedDisplay) {
+            const currentMusicSpeed = musicSpeed || Math.min(2.0, Math.max(1.0, currentDanceSpeed * 0.3))
+            this.musicSpeedDisplay.textContent = currentMusicSpeed.toFixed(2) + "x"
         }
 
         // 更新频率显示
@@ -338,10 +356,10 @@ class IntensityVisualizer {
         }
 
         // 更新烈度等级
-        this.updateIntensityLevel(speed)
+        this.updateIntensityLevel(currentDanceSpeed)
 
         // 更新鼓励文案
-        this.updateMotivation(speed, clapFrequency)
+        this.updateMotivation(currentDanceSpeed, clapFrequency)
     }
 
     /**
@@ -415,8 +433,12 @@ class IntensityVisualizer {
             this.progressGlow.style.width = "0%"
         }
 
-        if (this.speedDisplay) {
-            this.speedDisplay.textContent = this.baseSpeed.toFixed(1) + "x"
+        if (this.danceSpeedDisplay) {
+            this.danceSpeedDisplay.textContent = this.baseSpeed.toFixed(1) + "x"
+        }
+
+        if (this.musicSpeedDisplay) {
+            this.musicSpeedDisplay.textContent = this.baseSpeed.toFixed(1) + "x"
         }
 
         if (this.frequencyDisplay) {

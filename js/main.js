@@ -67,6 +67,13 @@ async function loadModel() {
             startBtn.disabled = false
             startBtn.onclick = initAndStartGame
         }
+
+        // 启用测试鼓掌按钮
+        const clapTestBtn = document.getElementById("clapTestBtn")
+        if (clapTestBtn) {
+            clapTestBtn.disabled = false
+            clapTestBtn.onclick = simulateClap
+        }
     } catch (error) {
         console.error("[Main] 模型加载失败:", error)
         updateStatus("模型加载失败: " + error.message, "error")
@@ -106,22 +113,47 @@ async function initAndStartGame() {
             maxSpeed: SPEED_CONFIG.MAX_SPEED,
             minSpeed: SPEED_CONFIG.MIN_SPEED,
             onSpeedChange: (data) => {
-                // 更新游戏速度
+                // 计算音乐速度（基于进度，最大2倍）
+                let musicSpeed = 1.0;
+                if (data.progressRatio !== undefined) {
+                    const threshold = SPEED_CONFIG.MUSIC_SPEED_PROGRESS_THRESHOLD; // 75%
+                    if (data.progressRatio <= threshold) {
+                        // 在75%进度内，音乐速度从1.0增长到2.0
+                        musicSpeed = 1.0 + (SPEED_CONFIG.MUSIC_MAX_SPEED - 1.0) * (data.progressRatio / threshold);
+                    } else {
+                        // 超过75%后，音乐速度保持最大值
+                        musicSpeed = SPEED_CONFIG.MUSIC_MAX_SPEED;
+                    }
+                } else {
+                    // 如果没有进度数据，使用保守的速度计算
+                    musicSpeed = Math.min(SPEED_CONFIG.MUSIC_MAX_SPEED, Math.max(1.0, data.speed * 0.3));
+                }
+
+                // 更新游戏速度（舞蹈速度，最大10倍）
                 if (danceGame) {
                     danceGame.setSpeedFromIntensity(data.speed)
                 }
-                // 更新 MP3 播放速度
+
+                // 更新 MP3 播放速度（音乐速度，最大2倍）
                 if (mp3Player) {
-                    mp3Player.setSpeed(data.speed)
+                    mp3Player.setSpeed(musicSpeed)
                 }
-                // 更新欢呼声
+
+                // 更新欢呼声（基于舞蹈速度）
                 if (cheerManager) {
                     cheerManager.updateSpeed(data.speed)
                 }
+
                 // 更新可视化
                 if (intensityVisualizer) {
-                    intensityVisualizer.update(data)
+                    intensityVisualizer.update({
+                        ...data,
+                        musicSpeed: musicSpeed,
+                        danceSpeed: data.speed
+                    })
                 }
+
+                console.log(`[Main] 速度更新 - 舞蹈: ${data.speed.toFixed(2)}x, 音乐: ${musicSpeed.toFixed(2)}x, 进度: ${(data.progressRatio || 0).toFixed(2)}`);
             },
         })
 
@@ -130,7 +162,7 @@ async function initAndStartGame() {
         // 创建 MP3 播放器（音乐速度最大 2 倍）
         // 在用户交互后创建 AudioContext
         mp3Player = new MP3Player({
-            maxSpeed: 2.0,
+            maxSpeed: SPEED_CONFIG.MUSIC_MAX_SPEED, // 使用2倍最大速度
         })
 
         const playerInitialized = await mp3Player.init()
@@ -232,6 +264,12 @@ async function startGame() {
             startBtn.textContent = "🔄 重新开始"
             startBtn.disabled = false
         }
+
+        // 显示测试鼓掌按钮
+        const clapTestBtn = document.getElementById("clapTestBtn")
+        if (clapTestBtn) {
+            clapTestBtn.style.display = "inline-block"
+        }
     } catch (error) {
         console.error("[Main] 启动游戏失败:", error)
         updateStatus("启动游戏失败: " + error.message, "error")
@@ -279,11 +317,39 @@ function stopGame() {
 }
 
 /**
+ * 模拟鼓掌（用于调试）
+ */
+function simulateClap() {
+    console.log("[Main] 模拟鼓掌调试")
+
+    // 创建模拟的鼓掌数据
+    const simulatedClapData = {
+        confidence: 0.95, // 高置信度
+        timestamp: Date.now(),
+        isSimulated: true
+    }
+
+    // 调用相同的处理函数
+    handleClap(simulatedClapData)
+
+    // 添加视觉反馈
+    const clapTestBtn = document.getElementById("clapTestBtn")
+    if (clapTestBtn) {
+        clapTestBtn.style.transform = "scale(0.95)"
+        setTimeout(() => {
+            clapTestBtn.style.transform = "scale(1)"
+        }, 150)
+    }
+
+    console.log("[Main] 模拟鼓掌完成")
+}
+
+/**
  * 处理拍巴掌事件
  */
 function handleClap(clapData) {
     clapCount++
-    console.log("[Main] 拍巴掌计数:", clapCount, "置信度:", clapData.confidence.toFixed(2))
+    console.log("[Main] 拍巴掌计数:", clapCount, "置信度:", clapData.confidence.toFixed(2), clapData.isSimulated ? "(模拟)" : "(真实)")
 
     // 记录鼓掌烈度
     if (clapIntensity) {

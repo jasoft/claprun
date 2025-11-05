@@ -96,6 +96,17 @@
                 box-shadow: 0 6px 20px rgba(255, 107, 107, 0.6);
             }
 
+            #clapTestBtn {
+                background: linear-gradient(135deg, #ffd700 0%, #ffb347 100%);
+                color: #333;
+                box-shadow: 0 4px 15px rgba(255, 215, 0, 0.4);
+            }
+
+            #clapTestBtn:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 6px 20px rgba(255, 215, 0, 0.6);
+            }
+
             .stats {
                 margin-top: 20px;
                 display: grid;
@@ -188,7 +199,8 @@
             <div id="intensityContainer"></div>
 
             <div class="controls" id="controls">
-                <button id="startBtn">🎮 开始游戏</button>
+                <button id="startBtn" type="button">🎮 开始游戏</button>
+                <button id="clapTestBtn" type="button" style="display: none;">👏 测试鼓掌</button>
             </div>
 
             <div class="status" id="status">
