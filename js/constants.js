@@ -20,7 +20,7 @@ export const CLAP_INTENSITY_CONFIG = {
     MAX_ACCELERATION: 2.0, // 最大加速度
 
     // 非线性阻力系统 - 实现真实汽车减速
-    BASE_FRICTION: 0.88, // 基础摩擦系数
+    BASE_FRICTION: 1, // 基础摩擦系数
     AIR_RESISTANCE_FACTOR: 0.15, // 空气阻力因子（二次方阻力）
     ENGINE_BRAKE: 0.05, // 发动机制动（松油门时的额外阻力）
 

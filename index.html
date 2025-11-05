@@ -8,6 +8,7 @@
         <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@1.3.1/dist/tf.min.js"></script>
         <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/speech-commands@0.4.0/dist/speech-commands.min.js"></script>
         <style id="app-styles">
+            @import url("https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700&display=swap");
             * {
                 margin: 0;
                 padding: 0;
@@ -15,198 +16,157 @@
             }
 
             body {
-                font-family: "Arial", sans-serif;
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                font-family: "Orbitron", "Arial", sans-serif;
+                background: radial-gradient(circle at top, rgba(118, 75, 162, 0.45), rgba(20, 19, 45, 0.95) 65%);
                 min-height: 100vh;
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                justify-content: center;
-                color: white;
+                color: #f3f4ff;
+                overflow: hidden;
+                position: relative;
             }
 
-            .container {
-                text-align: center;
-                background: rgba(0, 0, 0, 0.3);
-                padding: 30px;
-                border-radius: 20px;
-                backdrop-filter: blur(10px);
-                box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            body::before {
+                content: "";
+                position: absolute;
+                inset: 0;
+                background: radial-gradient(circle at center, rgba(255, 255, 255, 0.12), transparent 55%);
+                pointer-events: none;
+                filter: blur(40px);
+                opacity: 0.6;
+                z-index: 0;
             }
 
-            h1 {
-                margin-bottom: 20px;
-                font-size: 2.5em;
-                text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+            body.shake-active {
+                overflow: hidden;
             }
 
             #gameContainer {
-                margin: 20px 0;
-                border: 3px solid rgba(255, 255, 255, 0.3);
-                border-radius: 10px;
+                width: 100vw;
+                height: 100vh;
+                position: relative;
+                z-index: 1;
                 overflow: hidden;
-                box-shadow: 0 0 20px rgba(102, 126, 234, 0.5);
+                box-shadow: inset 0 0 120px rgba(0, 0, 0, 0.6);
+            }
+
+            #hudOverlay {
+                position: absolute;
+                inset: 0;
+                z-index: 2;
+                pointer-events: none;
+            }
+
+            .hud-top-right,
+            .hud-bottom-left {
+                position: absolute;
+                display: flex;
+                gap: 12px;
+                align-items: center;
+            }
+
+            .hud-top-right {
+                top: 24px;
+                right: 32px;
+                pointer-events: auto;
+            }
+
+            .hud-bottom-left {
+                bottom: 32px;
+                left: 32px;
+            }
+
+            #intensityContainer {
+                position: absolute;
+                inset: 0;
+                pointer-events: none;
+                z-index: 3;
             }
 
             .controls {
-                margin-top: 20px;
                 display: flex;
-                gap: 10px;
-                justify-content: center;
-                flex-wrap: wrap;
+                gap: 12px;
+                pointer-events: auto;
             }
 
             button {
-                padding: 12px 24px;
-                font-size: 1em;
+                padding: 14px 26px;
+                font-size: 0.95em;
                 border: none;
-                border-radius: 8px;
+                border-radius: 999px;
                 cursor: pointer;
-                transition: all 0.3s ease;
-                font-weight: bold;
+                transition: transform 0.2s ease, box-shadow 0.2s ease;
+                font-weight: 700;
+                letter-spacing: 0.1em;
                 text-transform: uppercase;
-                letter-spacing: 1px;
-            }
-
-            #startBtn {
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                background: linear-gradient(135deg, #5e5bf3 0%, #9e4bff 100%);
                 color: white;
-                box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+                box-shadow: 0 10px 24px rgba(60, 50, 160, 0.45);
             }
 
-            #startBtn:hover {
-                transform: translateY(-2px);
-                box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+            button:hover {
+                transform: translateY(-3px);
+                box-shadow: 0 14px 30px rgba(100, 80, 220, 0.55);
             }
 
-            #startBtn:disabled {
-                opacity: 0.5;
+            button:disabled {
+                opacity: 0.45;
                 cursor: not-allowed;
                 transform: none;
-            }
-
-            #stopBtn {
-                background: #ff6b6b;
-                color: white;
-                box-shadow: 0 4px 15px rgba(255, 107, 107, 0.4);
-            }
-
-            #stopBtn:hover {
-                transform: translateY(-2px);
-                box-shadow: 0 6px 20px rgba(255, 107, 107, 0.6);
+                box-shadow: none;
             }
 
             #clapTestBtn {
-                background: linear-gradient(135deg, #ffd700 0%, #ffb347 100%);
-                color: #333;
-                box-shadow: 0 4px 15px rgba(255, 215, 0, 0.4);
+                background: linear-gradient(135deg, #ff6f61 0%, #ff9a5a 100%);
+                box-shadow: 0 12px 26px rgba(255, 120, 90, 0.45);
             }
 
             #clapTestBtn:hover {
-                transform: translateY(-2px);
-                box-shadow: 0 6px 20px rgba(255, 215, 0, 0.6);
-            }
-
-            .stats {
-                margin-top: 20px;
-                display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-                gap: 15px;
-                font-size: 0.9em;
-            }
-
-            .stat-item {
-                background: rgba(255, 255, 255, 0.1);
-                padding: 15px;
-                border-radius: 8px;
-                border-left: 3px solid #667eea;
-            }
-
-            .stat-label {
-                font-size: 0.8em;
-                opacity: 0.8;
-                margin-bottom: 5px;
-            }
-
-            .stat-value {
-                font-size: 1.5em;
-                font-weight: bold;
+                box-shadow: 0 16px 30px rgba(255, 120, 90, 0.6);
             }
 
             .status {
-                margin-top: 15px;
-                padding: 10px;
-                border-radius: 8px;
-                background: rgba(255, 255, 255, 0.1);
-                min-height: 30px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
+                background: rgba(10, 15, 40, 0.55);
+                padding: 12px 20px;
+                border-radius: 12px;
+                min-width: 240px;
+                font-size: 0.9em;
+                letter-spacing: 0.04em;
+                text-transform: uppercase;
+                box-shadow: 0 8px 22px rgba(8, 12, 38, 0.45);
+                pointer-events: none;
             }
 
             .status.loading {
-                color: #ffd700;
+                color: #ffd54f;
             }
 
             .status.ready {
-                color: #90ee90;
+                color: #9cffd0;
             }
 
             .status.error {
-                color: #ff6b6b;
-            }
-
-            .clap-counter {
-                position: fixed;
-                top: 20px;
-                left: 20px;
-                background: rgba(0, 0, 0, 0.5);
-                padding: 15px 25px;
-                border-radius: 10px;
-                border: 2px solid rgba(255, 255, 255, 0.3);
-                backdrop-filter: blur(10px);
-                font-size: 1.5em;
-                font-weight: bold;
-                color: #ffd700;
-                text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
-                z-index: 1000;
-            }
-
-            .clap-counter-label {
-                font-size: 0.7em;
-                opacity: 0.8;
-                display: block;
-                margin-bottom: 5px;
-            }
-
-            .clap-counter-value {
-                font-size: 1.8em;
+                color: #ff8a80;
             }
         </style>
     </head>
     <body>
-        <div class="clap-counter">
-            <span class="clap-counter-label">👏 拍巴掌</span>
-            <span class="clap-counter-value" id="clapCounterDisplay">0</span>
-        </div>
+        <div id="gameContainer"></div>
 
-        <div class="container">
-            <h1>🎵 拍巴掌舞蹈 🎵</h1>
-            <p style="margin-bottom: 20px; opacity: 0.9">拍巴掌让小人跳舞，拍得越快跳得越快！</p>
-
-            <div id="gameContainer"></div>
-
-            <div id="intensityContainer"></div>
-
-            <div class="controls" id="controls">
-                <button id="startBtn" type="button">🎮 开始游戏</button>
-                <button id="clapTestBtn" type="button" style="display: none;">👏 测试鼓掌</button>
+        <div id="hudOverlay">
+            <div class="hud-top-right">
+                <div class="controls" id="controls">
+                    <button id="startBtn" type="button">▶ START</button>
+                    <button id="clapTestBtn" type="button" style="display: none;">👏 TEST</button>
+                </div>
             </div>
 
-            <div class="status" id="status">
-                <span>正在加载模型...</span>
+            <div class="hud-bottom-left">
+                <div class="status" id="status">
+                    <span>正在加载模型...</span>
+                </div>
             </div>
         </div>
+
+        <div id="intensityContainer"></div>
 
         <script type="module" src="/js/main.js"></script>
     </body>

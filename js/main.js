@@ -131,7 +131,7 @@ async function initAndStartGame() {
 
                 // 更新游戏速度（舞蹈速度，最大10倍）
                 if (danceGame) {
-                    danceGame.setSpeedFromIntensity(data.speed)
+                    danceGame.setSpeedFromIntensity(data.speed, data.progressRatio)
                 }
 
                 // 更新 MP3 播放速度（音乐速度，最大2倍）

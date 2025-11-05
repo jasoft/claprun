@@ -2,19 +2,23 @@
  * Phaser.js 游戏模块 - 小人舞蹈游戏
  */
 
-import { GAME_CONFIG, SPEED_CONFIG } from "./constants.js"
+import { SPEED_CONFIG } from "./constants.js"
 
 class DanceGame {
     constructor(containerId = "gameContainer") {
         this.config = {
-            type: Phaser.CANVAS,
-            width: 800,
-            height: 600,
+            type: Phaser.AUTO,
+            width: window.innerWidth,
+            height: window.innerHeight,
             parent: containerId,
+            backgroundColor: "#0a1026",
+            scale: {
+                mode: Phaser.Scale.RESIZE,
+                autoCenter: Phaser.Scale.CENTER_BOTH,
+            },
             render: {
-                canvas: {
-                    willReadFrequently: true,
-                },
+                pixelArt: false,
+                antialias: true,
             },
             physics: {
                 default: "arcade",
@@ -31,7 +35,9 @@ class DanceGame {
         }
 
         this.game = null
-        this.dancer = null
+        this.scene = null
+        this.dancers = []
+        this.activeDancerCount = 1
         this.danceSpeed = 1.0
         this.musicSpeed = 1.0
         this.isPlaying = false
@@ -48,6 +54,15 @@ class DanceGame {
         this.dataArray = null
         this.musicLoopTimer = null
         this.speedDecayTimer = null
+        this.background = null
+        this.floorGlow = null
+        this.viewportWidth = window.innerWidth
+        this.viewportHeight = window.innerHeight
+        this.resizeHandler = null
+        this.progressRatio = 0
+        this.celebrationParticles = null
+        this.celebrationEmitter = null
+        this.celebrationActive = false
     }
 
     /**
@@ -61,8 +76,14 @@ class DanceGame {
      * 预加载资源
      */
     preload() {
-        // 这里可以加载图片、音乐等资源
-        // 为了演示，我们使用 Phaser 的图形绘制功能
+        const scene = this.game && this.game.scene && this.game.scene.scenes && this.game.scene.scenes[0]
+        if (!scene) {
+            return
+        }
+
+        if (!scene.textures.exists("stage-bg")) {
+            scene.load.image("stage-bg", "images/bg.png")
+        }
     }
 
     /**
@@ -70,65 +91,272 @@ class DanceGame {
      */
     create() {
         const scene = this.game.scene.scenes[0]
+        this.scene = scene
+        scene.cameras.main.setBackgroundColor("#080d1d")
 
-        // 创建背景
-        const graphics = scene.make.graphics({ x: 0, y: 0, add: false })
-        graphics.fillStyle(0x667eea, 1)
-        graphics.fillRect(0, 0, 800, 600)
-        graphics.generateTexture("background", 800, 600)
-        graphics.destroy()
-
-        scene.add.image(400, 300, "background")
-
-        // 创建舞者（简单的小人）
-        this.createDancer(scene)
-
-        // 创建音乐可视化
+        // 创建舞者和可视化
+        this.createDancers(scene)
         this.createVisualization(scene)
+        this.createCelebration(scene)
 
         // 初始化音频上下文
         this.initAudioContext()
+
+        // 初始布局
+        this.applyLayout(scene.scale.width, scene.scale.height)
+
+        // 监听尺寸变化
+        this.resizeHandler = (gameSize) => {
+            this.applyLayout(gameSize.width, gameSize.height)
+        }
+        scene.scale.on("resize", this.resizeHandler, this)
     }
 
     /**
      * 创建舞者角色
      */
-    createDancer(scene) {
-        // 使用 Phaser 的图形绘制创建简单的小人
-        const graphics = scene.make.graphics({ x: 0, y: 0, add: false })
+    createDancers(scene) {
+        this.scene = scene
 
-        // 绘制小人（头、身体、四肢）
-        graphics.fillStyle(0xffdbac, 1) // 肤色
-        graphics.fillCircle(400, 150, 30) // 头
-        graphics.fillRect(385, 185, 30, 60) // 身体
-        graphics.fillRect(370, 245, 15, 80) // 左腿
-        graphics.fillRect(415, 245, 15, 80) // 右腿
-        graphics.fillRect(360, 190, 15, 50) // 左臂
-        graphics.fillRect(425, 190, 15, 50) // 右臂
+        const palettes = [
+            { body: 0xf9858b, limb: 0xf06177, leg: 0x2f3e9e },
+            { body: 0x80b7ff, limb: 0x4878d1, leg: 0x1f1535 },
+            { body: 0xffd071, limb: 0xffa64f, leg: 0x2c5f2d },
+        ]
 
-        graphics.generateTexture("dancer", 800, 400)
-        graphics.destroy()
+        const width = this.viewportWidth
+        const height = this.viewportHeight
+        const centerX = width / 2
+        const spacing = Math.min(width * 0.16, 220)
+        const baseY = height * 0.6
+        const baseScale = Phaser.Math.Clamp(width / 1400, 0.9, 1.4)
 
-        this.dancer = scene.add.sprite(400, 300, "dancer")
-        this.dancer.setScale(1)
+        this.dancers = [centerX - spacing, centerX, centerX + spacing].map((x, index) => {
+            const dancer = this.buildDancer(scene, x, baseY, palettes[index % palettes.length], index)
+            dancer.container.visible = index === 1
+            dancer.isActive = index === 1
+            dancer.defaultScale = baseScale
+            dancer.baseScale = baseScale
+            dancer.container.setScale(baseScale)
+            return dancer
+        })
+
+        this.activeDancerCount = 1
+    }
+
+    /**
+     * 构建单个舞者
+     */
+    buildDancer(scene, x, y, palette, index) {
+        const container = scene.add.container(x, y)
+
+        const head = scene.add.circle(0, -130, 26, 0xffe7d4)
+        const body = scene.add.rectangle(0, -110, 34, 110, palette.body)
+        body.setOrigin(0.5, 0)
+
+        const leftArm = scene.add.rectangle(-22, -100, 16, 90, palette.limb)
+        leftArm.setOrigin(0.5, 0)
+        const rightArm = scene.add.rectangle(22, -100, 16, 90, palette.limb)
+        rightArm.setOrigin(0.5, 0)
+
+        const leftLeg = scene.add.rectangle(-12, 0, 18, 110, palette.leg)
+        leftLeg.setOrigin(0.5, 0)
+        const rightLeg = scene.add.rectangle(12, 0, 18, 110, palette.leg)
+        rightLeg.setOrigin(0.5, 0)
+
+        const shadow = scene.add.ellipse(0, 190, 120, 26, 0x0b0512, 0.3)
+
+        // 设置初始角度，便于后续在基础上叠加动画
+        leftArm.baseRotation = Phaser.Math.DegToRad(-25)
+        rightArm.baseRotation = Phaser.Math.DegToRad(25)
+        leftLeg.baseRotation = Phaser.Math.DegToRad(10)
+        rightLeg.baseRotation = Phaser.Math.DegToRad(-10)
+
+        leftArm.setRotation(leftArm.baseRotation)
+        rightArm.setRotation(rightArm.baseRotation)
+        leftLeg.setRotation(leftLeg.baseRotation)
+        rightLeg.setRotation(rightLeg.baseRotation)
+
+        leftArm.baseY = leftArm.y
+        rightArm.baseY = rightArm.y
+        head.baseY = head.y
+        body.baseY = body.y
+
+        container.add([shadow, leftLeg, rightLeg, body, leftArm, rightArm, head])
+        container.setDepth(10 + index)
+
+        return {
+            container,
+            parts: {
+                head,
+                body,
+                leftArm,
+                rightArm,
+                leftLeg,
+                rightLeg,
+                shadow,
+            },
+            baseX: x,
+            baseY: y,
+            baseScale: 1,
+            defaultScale: 1,
+            phaseOffset: index * Math.PI * 0.5,
+            isActive: true,
+        }
     }
 
     /**
      * 创建音乐可视化
      */
     createVisualization(scene) {
-        // 创建音乐可视化条
         this.visualBars = []
-        const barCount = 32
-        const barWidth = 800 / barCount
+        this.visualBarCount = 36
 
-        for (let i = 0; i < barCount; i++) {
-            const bar = scene.add.rectangle(i * barWidth + barWidth / 2, 550, barWidth - 2, 10, 0x764ba2)
-            // 存储初始高度用于动画
-            bar.initialHeight = 10
+        for (let i = 0; i < this.visualBarCount; i++) {
+            const bar = scene.add.rectangle(0, 0, 10, 18, 0x6f7bff, 0.85)
+            bar.setOrigin(0.5, 1)
+            bar.initialHeight = 18
+            bar.baseWidth = 10
+            bar.setDepth(-1)
             this.visualBars.push(bar)
         }
-        console.log("[Game] 音乐可视化条已创建:", barCount, "个")
+        console.log("[Game] 音乐可视化条已创建:", this.visualBarCount, "个")
+    }
+
+    createCelebration(scene) {
+        if (!scene) return
+
+        if (!scene.textures.exists("confetti-pixel")) {
+            const graphics = scene.make.graphics({ x: 0, y: 0, add: false })
+            graphics.fillStyle(0xffffff, 1)
+            graphics.fillCircle(4, 4, 4)
+            graphics.generateTexture("confetti-pixel", 8, 8)
+            graphics.destroy()
+        }
+
+        if (this.celebrationParticles) {
+            this.celebrationParticles.destroy()
+            this.celebrationParticles = null
+            this.celebrationEmitter = null
+        }
+
+        this.celebrationParticles = scene.add.particles("confetti-pixel").setDepth(-2)
+        this.celebrationEmitter = this.celebrationParticles.createEmitter({
+            on: false,
+            speedX: { min: -180, max: 180 },
+            speedY: { min: -80, max: 220 },
+            angle: { min: -15, max: 195 },
+            gravityY: 230,
+            lifespan: { min: 1400, max: 2000 },
+            quantity: 22,
+            frequency: 70,
+            alpha: { start: 1, end: 0 },
+            scale: { start: 1.6, end: 0.3 },
+            rotate: { min: -260, max: 260 },
+            tint: [
+                0xffffff,
+                0xfff3c4,
+                0xffe47d,
+                0xffc2f9,
+                0x9fd8ff,
+                0xb8ff9e,
+                0xff9b85,
+                0xccabff,
+            ],
+            blendMode: "SCREEN",
+            emitZone: { type: "random", source: new Phaser.Geom.Rectangle(-scene.scale.width * 0.6, 0, scene.scale.width * 1.2, 1) },
+        })
+
+        this.celebrationEmitter.stop()
+        this.celebrationActive = false
+    }
+
+    applyLayout(width, height) {
+        if (!width || !height) {
+            return
+        }
+
+        this.viewportWidth = width
+        this.viewportHeight = height
+
+        if (!this.scene) return
+
+        if (this.background) {
+            this.background.destroy()
+            this.background = null
+        }
+
+        if (this.scene.textures.exists("stage-bg")) {
+            this.background = this.scene.add.image(width / 2, height / 2, "stage-bg").setDepth(-40)
+            const scaleX = width / this.background.width
+            const scaleY = height / this.background.height
+            const scale = Math.max(scaleX, scaleY)
+            this.background.setScale(scale)
+        } else {
+            if (this.scene.textures.exists("stage-fallback")) {
+                this.scene.textures.remove("stage-fallback")
+            }
+        const graphics = this.scene.add.graphics({ x: 0, y: 0 })
+        graphics.fillGradientStyle(0x1a2253, 0x252f6f, 0x0c1129, 0x131a38, 1, 1, 1, 1)
+        graphics.fillRect(0, 0, width, height)
+        graphics.generateTexture("stage-fallback", width, height)
+        graphics.destroy()
+        this.background = this.scene.add.image(width / 2, height / 2, "stage-fallback").setDepth(-40)
+        }
+
+        const floorWidth = Math.max(width * 0.55, 420)
+        const floorHeight = Math.max(height * 0.18, 160)
+        const floorY = height * 0.78
+        if (!this.floorGlow) {
+            this.floorGlow = this.scene.add.ellipse(width / 2, floorY, floorWidth, floorHeight, 0x4f5dff, 0.18)
+            this.floorGlow.setDepth(-5)
+        } else {
+            this.floorGlow.setPosition(width / 2, floorY)
+        }
+        if (this.floorGlow) {
+            this.floorGlow.setDisplaySize(floorWidth, floorHeight)
+        }
+
+        const centerX = width / 2
+        const spacing = Math.min(width * 0.16, 220)
+        const baseY = height * 0.6
+        const baseScale = Phaser.Math.Clamp(width / 1400, 0.9, 1.4)
+
+        this.dancers.forEach((dancer, index) => {
+            const offset = (index - 1) * spacing
+            dancer.baseX = centerX + offset
+            dancer.baseY = baseY
+            dancer.defaultScale = baseScale
+            dancer.baseScale = baseScale
+            dancer.container.setPosition(dancer.baseX, dancer.baseY)
+            dancer.container.setScale(dancer.baseScale)
+
+            if (dancer.parts && dancer.parts.shadow) {
+                dancer.parts.shadow.setDisplaySize(floorWidth * 0.25, Math.max(floorHeight * 0.25, 40))
+            }
+        })
+
+        if (this.visualBars && this.visualBars.length) {
+            const usableWidth = width * 0.75
+            const startX = (width - usableWidth) / 2
+            const barSpacing = usableWidth / this.visualBars.length
+            const baseHeight = Math.max(16, height * 0.08)
+
+            this.visualBars.forEach((bar, index) => {
+                bar.baseWidth = Math.max(10, barSpacing * 0.45)
+                bar.initialHeight = baseHeight
+                bar.setPosition(startX + barSpacing * index + barSpacing / 2, height * 0.94)
+                bar.setDisplaySize(bar.baseWidth, bar.initialHeight)
+            })
+        }
+
+        if (this.celebrationEmitter) {
+            const zone = new Phaser.Geom.Rectangle(-width * 0.6, 0, width * 1.2, 1)
+            this.celebrationEmitter.setPosition(centerX, height * 0.08)
+            this.celebrationEmitter.setEmitZone({ type: "random", source: zone })
+        }
+
+        this.setActiveDancerCount(this.activeDancerCount)
     }
 
     /**
@@ -160,18 +388,144 @@ class DanceGame {
      * 更新舞蹈动画
      */
     updateDanceAnimation() {
-        this.danceTimer += 1
+        if (!this.dancers.length) return
 
-        // 根据舞蹈强度调整动画
-        const scale = 1 + this.danceIntensity * 0.3
-        const rotation = Math.sin(this.danceTimer * 0.05 * this.danceSpeed) * this.danceIntensity * 0.5
+        this.danceTimer += this.danceSpeed * 0.6
+        const swayFrequency = 0.025 * this.danceSpeed
+        const minIntensity = 0.12
 
-        this.dancer.setScale(scale)
-        this.dancer.setRotation(rotation)
+        this.dancers.forEach((dancer, index) => {
+            if (!dancer.isActive || !dancer.container.visible) {
+                return
+            }
 
-        // 逐渐降低舞蹈强度，但保持最小值 0.15（保持缓慢跳舞）
-        const minIntensity = 0.15
-        this.danceIntensity = Math.max(minIntensity, this.danceIntensity - 0.005)
+            const time = (this.danceTimer + index * 25) * swayFrequency + dancer.phaseOffset
+            const wave = Math.sin(time)
+            const waveSecondary = Math.sin(time * 0.8 + Math.PI / 3)
+            const bounce = Math.abs(Math.sin(time * 0.55)) * (0.8 + 0.4 * this.danceIntensity)
+            const liftPhase = Math.sin(time * 0.5 + dancer.phaseOffset * 0.5)
+            const liftAmount = Phaser.Math.Clamp((liftPhase + 1) / 2 * this.danceIntensity, 0, 1)
+
+            const armSwing = Phaser.Math.DegToRad(30 + 20 * this.danceIntensity) * waveSecondary
+            const armLift = Phaser.Math.DegToRad(110) * liftAmount
+            const armClapPulse = Phaser.Math.DegToRad(10) * Math.sin(time * 1.6)
+            const legSwing = Phaser.Math.DegToRad(32 + 12 * this.danceIntensity) * wave * (0.6 + liftAmount * 0.4)
+            const bodyLean = Phaser.Math.DegToRad(8) * Math.sin(time * 0.6) * this.danceIntensity
+            const torsoRise = Phaser.Math.Linear(0, -24, liftAmount) - bounce * 10
+
+            dancer.parts.leftArm.setRotation(
+                dancer.parts.leftArm.baseRotation - armLift + armSwing + armClapPulse
+            )
+            dancer.parts.rightArm.setRotation(
+                dancer.parts.rightArm.baseRotation + armLift - armSwing + armClapPulse
+            )
+            dancer.parts.leftArm.y = dancer.parts.leftArm.baseY + Phaser.Math.Linear(0, -58, liftAmount)
+            dancer.parts.rightArm.y = dancer.parts.rightArm.baseY + Phaser.Math.Linear(0, -58, liftAmount)
+
+            dancer.parts.leftLeg.setRotation(dancer.parts.leftLeg.baseRotation - legSwing)
+            dancer.parts.rightLeg.setRotation(dancer.parts.rightLeg.baseRotation + legSwing)
+            dancer.parts.body.setRotation(bodyLean)
+            dancer.parts.head.setRotation(bodyLean * 0.65)
+            dancer.parts.body.y = dancer.parts.body.baseY + torsoRise
+            dancer.parts.head.y = dancer.parts.head.baseY + torsoRise * 0.7
+
+            dancer.container.setRotation(Math.sin(time * 0.4) * Phaser.Math.DegToRad(5) * this.danceIntensity)
+            const scalePulse = Math.sin(time * 0.9 + Math.PI / 4)
+            dancer.container.setScale(
+                dancer.baseScale * (1 + 0.16 * this.danceIntensity * scalePulse - 0.05 * liftAmount)
+            )
+            const hopHeight = bounce * 24 + liftAmount * 18
+            dancer.container.y = dancer.baseY - hopHeight - this.danceIntensity * 4
+            const sway = Math.sin(time * 0.4 + dancer.phaseOffset) * this.danceIntensity * 12
+            dancer.container.x = dancer.baseX + sway
+
+            dancer.parts.shadow.setScale(
+                1 + 0.24 * this.danceIntensity * (1 - Math.abs(Math.sin(time))),
+                1 + 0.12 * this.danceIntensity * Math.abs(Math.sin(time))
+            )
+        })
+
+        this.danceIntensity = Math.max(minIntensity, this.danceIntensity - 0.004)
+    }
+
+    /**
+     * 根据热度切换舞者数量
+     */
+    updateCrowdMode(progressRatio = 0) {
+        if (!this.dancers.length) return
+
+        this.progressRatio = progressRatio
+        const desiredCount = progressRatio > 0.5 ? 3 : 1
+
+        if (desiredCount !== this.activeDancerCount) {
+            this.setActiveDancerCount(desiredCount)
+        }
+    }
+
+    /**
+     * 设置当前舞者数量
+     */
+    setActiveDancerCount(count) {
+        if (!this.dancers.length) return
+
+        this.activeDancerCount = count
+
+        this.dancers.forEach((dancer, index) => {
+            const shouldShow = count === 3 ? true : index === 1
+
+            if (shouldShow) {
+                const scaleFactor = count === 3 ? (index === 1 ? 1 : 0.88) : 1
+                dancer.baseScale = dancer.defaultScale * scaleFactor
+
+                if (!dancer.isActive) {
+                    dancer.parts.leftArm.setRotation(dancer.parts.leftArm.baseRotation)
+                    dancer.parts.rightArm.setRotation(dancer.parts.rightArm.baseRotation)
+                    dancer.parts.leftLeg.setRotation(dancer.parts.leftLeg.baseRotation)
+                    dancer.parts.rightLeg.setRotation(dancer.parts.rightLeg.baseRotation)
+                    dancer.parts.leftArm.y = dancer.parts.leftArm.baseY
+                    dancer.parts.rightArm.y = dancer.parts.rightArm.baseY
+                    dancer.parts.body.y = dancer.parts.body.baseY
+                    dancer.parts.head.y = dancer.parts.head.baseY
+                    dancer.parts.shadow.setScale(1, 1)
+                }
+
+                dancer.container.visible = true
+                dancer.container.alpha = index === 1 ? 1 : (count === 3 ? 0 : 1)
+                dancer.container.x = dancer.baseX
+                dancer.container.y = dancer.baseY
+                dancer.container.setScale(dancer.baseScale)
+                dancer.container.setRotation(0)
+                dancer.isActive = true
+
+                if (count === 3 && index !== 1 && this.scene) {
+                    this.scene.tweens.add({
+                        targets: dancer.container,
+                        alpha: 1,
+                        duration: 280,
+                        ease: "Sine.easeOut",
+                    })
+                }
+            } else {
+                if (dancer.container.visible && this.scene) {
+                    this.scene.tweens.add({
+                        targets: dancer.container,
+                        alpha: 0,
+                        duration: 200,
+                        ease: "Sine.easeIn",
+                        onComplete: () => {
+                            dancer.container.visible = false
+                            dancer.container.alpha = 1
+                        },
+                    })
+                } else {
+                    dancer.container.visible = false
+                    dancer.container.alpha = 1
+                }
+
+                dancer.baseScale = dancer.defaultScale
+                dancer.isActive = false
+            }
+        })
     }
 
     /**
@@ -183,12 +537,14 @@ class DanceGame {
         // 根据舞蹈强度和速度生成可视化条高度
         for (let i = 0; i < this.visualBars.length; i++) {
             // 基于舞蹈强度、速度和时间的组合
-            const baseHeight = Math.sin((this.danceTimer + i) * 0.1 * this.danceSpeed) * 50 + 50
-            const height = baseHeight * this.danceIntensity * this.musicSpeed
-            const newHeight = Math.max(10, Math.min(150, height))
-            // 使用 setScale 来改变高度
-            const scaleY = newHeight / this.visualBars[i].initialHeight
-            this.visualBars[i].setScale(1, scaleY)
+            const bar = this.visualBars[i]
+            const wave = Math.sin((this.danceTimer + i) * 0.12 * this.danceSpeed)
+            const heightFactor = (wave + 1) * 0.5 + this.danceIntensity * 0.6
+            const rawHeight = bar.initialHeight * heightFactor * (0.8 + this.musicSpeed * 0.2)
+            const minHeight = Math.max(16, this.viewportHeight * 0.05)
+            const maxHeight = Math.max(50, this.viewportHeight * 0.14)
+            const displayHeight = Phaser.Math.Clamp(rawHeight, minHeight, maxHeight)
+            bar.setDisplaySize(bar.baseWidth, displayHeight)
         }
     }
 
@@ -368,7 +724,7 @@ class DanceGame {
      * 从烈度计算器设置速度
      * @param {number} speed - 新的速度（1.0 - 10.0）
      */
-    setSpeedFromIntensity(speed) {
+    setSpeedFromIntensity(speed, progressRatio = 0) {
         // 跳舞速度：1.0 - 10.0
         this.danceSpeed = speed
 
@@ -385,16 +741,55 @@ class DanceGame {
         const speedRange = 10.0 - 1.0
         const speedOffset = speed - 1.0
         this.danceIntensity = 0.2 + (speedOffset / speedRange) * 0.8 // 0.2 - 1.0
+
+        this.updateCrowdMode(progressRatio)
+        this.setCelebrationActive(progressRatio >= 1)
+    }
+
+    setCelebrationActive(active) {
+        if (!this.celebrationEmitter) return
+
+        if (active && !this.celebrationActive) {
+            this.celebrationEmitter.start()
+        } else if (!active && this.celebrationActive) {
+            this.celebrationEmitter.stop()
+        }
+
+        this.celebrationActive = active
     }
 
     /**
      * 销毁游戏
      */
     destroy() {
+        if (this.scene && this.resizeHandler) {
+            this.scene.scale.off("resize", this.resizeHandler, this)
+            this.resizeHandler = null
+        }
+
+        if (this.background) {
+            this.background.destroy()
+            this.background = null
+        }
+
+        if (this.floorGlow) {
+            this.floorGlow.destroy()
+            this.floorGlow = null
+        }
+
+        if (this.celebrationParticles) {
+            this.celebrationParticles.destroy()
+            this.celebrationParticles = null
+            this.celebrationEmitter = null
+            this.celebrationActive = false
+        }
+
         if (this.game) {
             this.game.destroy(true)
             this.game = null
         }
+
+        this.scene = null
 
         if (this.speedDecayTimer) {
             clearInterval(this.speedDecayTimer)

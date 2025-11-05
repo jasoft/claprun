@@ -9,7 +9,7 @@
     "preview": "vite preview"
   },
   "devDependencies": {
+    "@playwright/mcp": "^0.0.45",
     "vite": "^5.0.0"
   }
 }
-
