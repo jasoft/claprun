@@ -20,6 +20,22 @@ let cheerManager = null
 let clapCount = 0
 let isInitialized = false
 let loudnessDetector = null
+let isGameRunning = false
+
+const detectionSettings = {
+    clap: true,
+    loudness: LOUDNESS_DETECTION_CONFIG.ENABLED,
+}
+
+let configPanelVisible = false
+let configUI = {
+    panel: null,
+    button: null,
+    clapToggle: null,
+    loudnessToggle: null,
+    clapStatus: null,
+    loudnessStatus: null,
+}
 
 /**
  * 加载模型（不初始化 AudioContext）
@@ -209,17 +225,17 @@ async function initAndStartGame() {
             console.warn("[Main] 欢呼声管理器初始化失败")
         }
 
-        if (LOUDNESS_DETECTION_CONFIG.ENABLED) {
-            console.log("[Main] 初始化响度检测器...")
-            loudnessDetector = new LoudnessDetector({
-                onLoudClap: (loudnessData) => {
-                    handleClap({
-                        ...loudnessData,
-                        isLoudnessDetection: true,
-                    })
-                },
-            })
-        }
+        console.log("[Main] 初始化响度检测器，配置:", LOUDNESS_DETECTION_CONFIG)
+        loudnessDetector = new LoudnessDetector({
+            enabled: true,
+            onLoudClap: (loudnessData) => {
+                handleClap({
+                    ...loudnessData,
+                    isLoudnessDetection: true,
+                })
+            },
+        })
+        console.log("[Main] 响度检测器实例创建完成")
 
         console.log("[Main] 游戏组件初始化完成！")
         isInitialized = true
@@ -259,6 +275,7 @@ async function startGame() {
 
         // 启动游戏
         danceGame.start()
+        isGameRunning = true
 
         // 重置鼓掌烈度
         if (clapIntensity) {
@@ -275,19 +292,7 @@ async function startGame() {
             mp3Player.play()
         }
 
-        // 启动音频监听
-        console.log("[Main] 启动音频监听...")
-        const listening = audioRecognizer.startListening()
-        if (!listening) {
-            throw new Error("无法启动音频监听")
-        }
-
-        if (loudnessDetector) {
-            const loudnessStarted = await loudnessDetector.start()
-            if (!loudnessStarted) {
-                console.warn("[Main] 响度检测器启动失败")
-            }
-        }
+        await updateDetectorsForCurrentSettings({ strict: true })
 
         console.log("[Main] 游戏已启动，等待拍巴掌...")
         updateStatus("🎉 游戏已开始！尽情拍巴掌吧！", "ready")
@@ -305,6 +310,17 @@ async function startGame() {
             clapTestBtn.style.display = "inline-block"
         }
     } catch (error) {
+        isGameRunning = false
+        if (danceGame) {
+            danceGame.stop()
+        }
+        if (mp3Player) {
+            mp3Player.stop()
+        }
+        if (cheerManager) {
+            cheerManager.stopAllCheers()
+        }
+        await updateDetectorsForCurrentSettings()
         console.error("[Main] 启动游戏失败:", error)
         updateStatus("启动游戏失败: " + error.message, "error")
     }
@@ -315,11 +331,14 @@ async function startGame() {
  */
 function stopGame() {
     try {
+        isGameRunning = false
+
         if (audioRecognizer) {
             audioRecognizer.stopListening()
         }
 
         if (loudnessDetector) {
+            console.log("[Main] 停止响度检测器")
             loudnessDetector.stop()
         }
 
@@ -485,10 +504,144 @@ function playFeedback() {
     */
 }
 
+function setConfigPanelVisibility(visible) {
+    configPanelVisible = visible
+    if (configUI.panel) {
+        configUI.panel.classList.toggle("visible", visible)
+    }
+}
+
+function updateDetectionStatusLabels() {
+    if (configUI.clapStatus) {
+        configUI.clapStatus.textContent = detectionSettings.clap ? "已启用" : "已关闭"
+        configUI.clapStatus.classList.toggle("active", detectionSettings.clap)
+    }
+    if (configUI.loudnessStatus) {
+        configUI.loudnessStatus.textContent = detectionSettings.loudness ? "已启用" : "已关闭"
+        configUI.loudnessStatus.classList.toggle("active", detectionSettings.loudness)
+    }
+
+    if (configUI.clapToggle && configUI.clapToggle.checked !== detectionSettings.clap) {
+        configUI.clapToggle.checked = detectionSettings.clap
+    }
+
+    if (configUI.loudnessToggle && configUI.loudnessToggle.checked !== detectionSettings.loudness) {
+        configUI.loudnessToggle.checked = detectionSettings.loudness
+    }
+}
+
+async function handleDetectionToggleChange(type, enabled) {
+    detectionSettings[type] = enabled
+    updateDetectionStatusLabels()
+
+    const label = type === "clap" ? "掌声识别" : "响度识别"
+    console.log(`[Main] ${label}${enabled ? "已启用" : "已关闭"}`)
+
+    await updateDetectorsForCurrentSettings()
+}
+
+async function updateDetectorsForCurrentSettings(options = {}) {
+    const { strict = false } = options
+
+    if (!isGameRunning) {
+        if (audioRecognizer) {
+            audioRecognizer.stopListening()
+        }
+        if (loudnessDetector) {
+            loudnessDetector.stop()
+        }
+        return
+    }
+
+    if (audioRecognizer) {
+        if (detectionSettings.clap) {
+            const listening = audioRecognizer.startListening()
+            if (!listening) {
+                const message = "无法启动音频监听"
+                if (strict) {
+                    throw new Error(message)
+                } else {
+                    console.warn("[Main] " + message)
+                }
+            } else {
+                console.log("[Main] 掌声识别已启用并开始监听")
+            }
+        } else {
+            audioRecognizer.stopListening()
+            console.log("[Main] 掌声识别已关闭，停止监听")
+        }
+    }
+
+    if (loudnessDetector) {
+        if (detectionSettings.loudness) {
+            console.log("[Main] 尝试启动响度检测...")
+            const loudnessStarted = await loudnessDetector.start()
+            if (!loudnessStarted) {
+                if (strict) {
+                    throw new Error("无法启动响度检测器")
+                } else {
+                    console.warn("[Main] 响度检测器启动失败")
+                }
+            } else {
+                console.log("[Main] 响度检测器运行中")
+            }
+        } else {
+            loudnessDetector.stop()
+            console.log("[Main] 响度识别已关闭")
+        }
+    }
+}
+
+function setupDetectionConfigUI() {
+    configUI = {
+        panel: document.getElementById("configPanel"),
+        button: document.getElementById("configBtn"),
+        clapToggle: document.getElementById("clapDetectionToggle"),
+        loudnessToggle: document.getElementById("loudnessDetectionToggle"),
+        clapStatus: document.getElementById("clapDetectionStatus"),
+        loudnessStatus: document.getElementById("loudnessDetectionStatus"),
+    }
+
+    const { panel, button, clapToggle, loudnessToggle } = configUI
+
+    if (!panel || !button || !clapToggle || !loudnessToggle) {
+        console.warn("[Main] 侦测配置 UI 初始化失败，缺少必要元素")
+        return
+    }
+
+    clapToggle.checked = detectionSettings.clap
+    loudnessToggle.checked = detectionSettings.loudness
+    updateDetectionStatusLabels()
+
+    button.addEventListener("click", (event) => {
+        event.stopPropagation()
+        setConfigPanelVisibility(!configPanelVisible)
+    })
+
+    panel.addEventListener("click", (event) => {
+        event.stopPropagation()
+    })
+
+    document.addEventListener("click", () => {
+        if (configPanelVisible) {
+            setConfigPanelVisibility(false)
+        }
+    })
+
+    clapToggle.addEventListener("change", async (event) => {
+        await handleDetectionToggleChange("clap", event.target.checked)
+    })
+
+    loudnessToggle.addEventListener("change", async (event) => {
+        await handleDetectionToggleChange("loudness", event.target.checked)
+    })
+}
+
 /**
  * 页面加载完成后加载模型
  */
 document.addEventListener("DOMContentLoaded", () => {
+    setupDetectionConfigUI()
     loadModel()
 })
 

@@ -80,7 +80,7 @@ class AudioRecognizer {
                     includeSpectrogram: false, // 禁用频谱图以减少处理时间
                     probabilityThreshold: 0.5, // 降低阈值以加快响应
                     invokeCallbackOnNoiseAndUnknown: true,
-                    overlapFactor: 0.8, // 90% 重叠以实现实时级别的响应（与 Teachable Machine 一致）
+                    overlapFactor: 0.9, // 90% 重叠以实现实时级别的响应（与 Teachable Machine 一致）
                 }
             )
 

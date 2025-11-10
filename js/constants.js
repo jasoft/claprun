@@ -112,15 +112,9 @@ export const AUDIO_RECOGNIZER_CONFIG = {
 // ============ 响度检测配置 ============
 export const LOUDNESS_DETECTION_CONFIG = {
     ENABLED: true, // 是否启用响度检测并将其视为鼓掌
-    LOUDNESS_THRESHOLD: 0.8, // 响度达到 80% 视为一次鼓掌
-
-    // 采样频率：每秒检测 2-5 次
-    MIN_SAMPLES_PER_SECOND: 1,
-    MAX_SAMPLES_PER_SECOND: 5,
-    DEFAULT_SAMPLES_PER_SECOND: 1,
-
-    // 分析参数
-    FFT_SIZE: 2048,
-    SMOOTHING_TIME_CONSTANT: 0.8,
-    SAMPLE_COOLDOWN_MS: 300, // 一次触发后短暂冷却，避免重复计数
+    PEAK_THRESHOLD: 0.75, // 麦克风电平 >= 75% 视为掌声
+    SAMPLES_PER_SECOND: 10, // 固定每秒检测 10 次
+    FFT_SIZE: 1024,
+    SMOOTHING_TIME_CONSTANT: 0.05,
+    SAMPLE_COOLDOWN_MS: 80, // 允许持续声音每秒触发约 10 次
 }
