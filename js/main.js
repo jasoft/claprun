@@ -8,7 +8,8 @@ import { ClapIntensity } from "./clap-intensity.js"
 import { MP3Player } from "./mp3-player.js"
 import { IntensityVisualizer } from "./intensity-visualizer.js"
 import CheerManager from "./cheer-manager.js"
-import { SPEED_CONFIG } from "./constants.js"
+import LoudnessDetector from "./loudness-detector.js"
+import { SPEED_CONFIG, LOUDNESS_DETECTION_CONFIG } from "./constants.js"
 
 let audioRecognizer = null
 let danceGame = null
@@ -18,6 +19,7 @@ let intensityVisualizer = null
 let cheerManager = null
 let clapCount = 0
 let isInitialized = false
+let loudnessDetector = null
 
 /**
  * 加载模型（不初始化 AudioContext）
@@ -207,6 +209,18 @@ async function initAndStartGame() {
             console.warn("[Main] 欢呼声管理器初始化失败")
         }
 
+        if (LOUDNESS_DETECTION_CONFIG.ENABLED) {
+            console.log("[Main] 初始化响度检测器...")
+            loudnessDetector = new LoudnessDetector({
+                onLoudClap: (loudnessData) => {
+                    handleClap({
+                        ...loudnessData,
+                        isLoudnessDetection: true,
+                    })
+                },
+            })
+        }
+
         console.log("[Main] 游戏组件初始化完成！")
         isInitialized = true
 
@@ -268,6 +282,13 @@ async function startGame() {
             throw new Error("无法启动音频监听")
         }
 
+        if (loudnessDetector) {
+            const loudnessStarted = await loudnessDetector.start()
+            if (!loudnessStarted) {
+                console.warn("[Main] 响度检测器启动失败")
+            }
+        }
+
         console.log("[Main] 游戏已启动，等待拍巴掌...")
         updateStatus("🎉 游戏已开始！尽情拍巴掌吧！", "ready")
 
@@ -296,6 +317,10 @@ function stopGame() {
     try {
         if (audioRecognizer) {
             audioRecognizer.stopListening()
+        }
+
+        if (loudnessDetector) {
+            loudnessDetector.stop()
         }
 
         if (danceGame) {
@@ -361,13 +386,18 @@ function simulateClap() {
  * 处理拍巴掌事件
  */
 function handleClap(clapData) {
+    const normalizedConfidence = typeof clapData.confidence === "number" ? clapData.confidence : 1
+    clapData.confidence = normalizedConfidence
+    const sourceLabel = clapData.isLoudnessDetection ? "(响度)" : "(识别)"
+
     clapCount++
     console.log(
         "[Main] 拍巴掌计数:",
         clapCount,
         "置信度:",
         clapData.confidence.toFixed(2),
-        clapData.isSimulated ? "(模拟)" : "(真实)"
+        clapData.isSimulated ? "(模拟)" : "(真实)",
+        sourceLabel
     )
 
     // 记录鼓掌烈度

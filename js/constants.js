@@ -17,12 +17,12 @@ export const SPEED_CONFIG = {
 // ============ 鼓掌烈度配置 ============
 export const CLAP_INTENSITY_CONFIG = {
     // 汽车物理模型参数 - 实现指数衰减减速
-    MAX_ACCELERATION: 2.0, // 最大加速度
+    MAX_ACCELERATION: 1.3, // 最大加速度
 
     // 非线性阻力系统 - 实现真实汽车减速
     BASE_FRICTION: 0.5, // 基础摩擦系数
     AIR_RESISTANCE_FACTOR: 0.15, // 空气阻力因子（二次方阻力）
-    ENGINE_BRAKE: 0.15, // 发动机制动（松油门时的额外阻力）
+    ENGINE_BRAKE: 0.05, // 发动机制动（松油门时的额外阻力）
 
     // 速度相关的阻力参数
     LOW_SPEED_FRICTION: 0.02, // 低速时的基础阻力
@@ -33,8 +33,8 @@ export const CLAP_INTENSITY_CONFIG = {
     CLAP_FORCE_DURATION: 10, // 一次鼓掌产生的推力持续时间 (ms)
 
     // 鼓掌频率计算
-    FREQUENCY_WINDOW: 1000, // 计算频率的时间窗口 (ms)
-    CLAP_FORCE_MULTIPLIER: 0.5, // 鼓掌力度转换系数
+    FREQUENCY_WINDOW: 1500, // 计算频率的时间窗口 (ms)
+    CLAP_FORCE_MULTIPLIER: 0.35, // 鼓掌力度转换系数
 
     // 历史记录窗口
     CLAP_HISTORY_WINDOW: 3000, // 时间窗口 (ms)
@@ -107,4 +107,20 @@ export const AUDIO_RECOGNIZER_CONFIG = {
     PROBABILITY_THRESHOLD: 0.8,
     INVOKE_CALLBACK_ON_NOISE_AND_UNKNOWN: true,
     OVERLAP_FACTOR: 0.8,
+}
+
+// ============ 响度检测配置 ============
+export const LOUDNESS_DETECTION_CONFIG = {
+    ENABLED: true, // 是否启用响度检测并将其视为鼓掌
+    LOUDNESS_THRESHOLD: 0.8, // 响度达到 80% 视为一次鼓掌
+
+    // 采样频率：每秒检测 2-5 次
+    MIN_SAMPLES_PER_SECOND: 1,
+    MAX_SAMPLES_PER_SECOND: 5,
+    DEFAULT_SAMPLES_PER_SECOND: 1,
+
+    // 分析参数
+    FFT_SIZE: 2048,
+    SMOOTHING_TIME_CONSTANT: 0.8,
+    SAMPLE_COOLDOWN_MS: 300, // 一次触发后短暂冷却，避免重复计数
 }
