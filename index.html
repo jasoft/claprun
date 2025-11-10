@@ -75,6 +75,7 @@
                 display: flex;
                 gap: 12px;
                 pointer-events: auto;
+                align-items: center;
             }
             button {
                 padding: 14px 26px;
@@ -107,6 +108,13 @@
             #clapTestBtn:hover {
                 box-shadow: 0 16px 30px rgba(255, 120, 90, 0.6);
             }
+            #configBtn {
+                background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+                box-shadow: 0 10px 24px rgba(59, 130, 246, 0.45);
+            }
+            #configBtn:hover {
+                box-shadow: 0 14px 28px rgba(59, 130, 246, 0.6);
+            }
             .status {
                 background: rgba(10, 15, 40, 0.55);
                 padding: 12px 20px;
@@ -127,8 +135,60 @@
             .status.error {
                 color: #ff8a80;
             }
+            .config-panel {
+                position: absolute;
+                top: 70px;
+                right: 32px;
+                width: 260px;
+                background: rgba(15, 18, 46, 0.9);
+                border-radius: 16px;
+                padding: 18px 20px;
+                box-shadow: 0 20px 45px rgba(6, 9, 30, 0.65);
+                backdrop-filter: blur(12px);
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                transition: opacity 0.2s ease, transform 0.2s ease;
+                opacity: 0;
+                transform: translateY(-8px);
+                pointer-events: none;
+                z-index: 5;
+            }
+            .config-panel.visible {
+                opacity: 1;
+                transform: translateY(0);
+                pointer-events: auto;
+            }
+            .config-panel h4 {
+                font-size: 0.9em;
+                letter-spacing: 0.08em;
+                margin-bottom: 12px;
+                color: #c4d3ff;
+            }
+            .toggle-row {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                padding: 10px 0;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            }
+            .toggle-row:last-child {
+                border-bottom: none;
+            }
+            .toggle-label {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                font-size: 0.9em;
+                color: #e2e8ff;
+            }
+            .toggle-status {
+                font-size: 0.85em;
+                color: #a0aec0;
+            }
+            .toggle-status.active {
+                color: #34d399;
+            }
         </style>
-      <script type="module" crossorigin src="./assets/index-BWwABX11.js"></script>
+      <script type="module" crossorigin src="./assets/index-BSaxL-Dy.js"></script>
     </head>
     <body>
         <div id="gameContainer"></div>
@@ -138,12 +198,31 @@
                 <div class="controls" id="controls">
                     <button id="startBtn" type="button">▶ START</button>
                     <button id="clapTestBtn" type="button" style="display: none;">👏 TEST</button>
+                    <button id="configBtn" type="button">⚙ CONFIG</button>
                 </div>
             </div>
 
             <div class="hud-bottom-left">
                 <div class="status" id="status">
                     <span>正在加载模型...</span>
+                </div>
+            </div>
+
+            <div id="configPanel" class="config-panel">
+                <h4>侦测配置</h4>
+                <div class="toggle-row">
+                    <label class="toggle-label" for="clapDetectionToggle">
+                        <input type="checkbox" id="clapDetectionToggle" checked />
+                        <span>掌声识别</span>
+                    </label>
+                    <span class="toggle-status active" id="clapDetectionStatus">已启用</span>
+                </div>
+                <div class="toggle-row">
+                    <label class="toggle-label" for="loudnessDetectionToggle">
+                        <input type="checkbox" id="loudnessDetectionToggle" checked />
+                        <span>响度识别</span>
+                    </label>
+                    <span class="toggle-status active" id="loudnessDetectionStatus">已启用</span>
                 </div>
             </div>
         </div>
